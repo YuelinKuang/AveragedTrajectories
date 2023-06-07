@@ -1,0 +1,122 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import sdeint
+import math
+
+g = 0.3
+ω = 1
+β = 0.3 # 0.15 to 0.3
+Γ = 0.05
+## ϕ = 0
+
+num_periods = 500 # make sure that this is divisible by 5 to get rid of the transients
+T = 2*np.pi/ω
+# y0 = np.array([0, 0.1, 0.1, 0.001]) 
+y0 = np.array([1, 0, 0.1, 0.001]) #x -> lower values
+# spacing = 200000
+pts_in_a_period = 2000
+spacing = num_periods*pts_in_a_period
+tspan = np.linspace(0, num_periods*T, spacing)
+samp_freq = T
+# tspan = np.linspace(0, 1000., 200000)
+
+def run_test(ϕ,num_xs): 
+    # main function (including dissipation)
+    def f(y, t):
+        x = y[0]
+        p = y[1]
+        χ = y[2]
+        Π = y[3]
+
+        f0 = p
+        f1 = x - β ** 2 * x ** 3 + g / β * np.cos(ω * t) - 2 * Γ * p - 3*x*β**2*χ**2
+        f2 = Π + Γ * ((χ - χ ** 3 + χ * Π ** 2 - 1 / (4 * χ)) * np.cos(2*ϕ) - Π * (-1 + 2*χ**2) * np.sin(2*ϕ) + χ - χ**3 - χ*Π**2 + 1/(4*χ))
+        f3 = χ * (1 - 3 * β ** 2 * (x ** 2 + χ ** 2)) + 1 / (4 * χ ** 3) + Γ * ((Π ** 3 - Π + 3 * Π / (4 * χ ** 2) - Π * χ ** 2) * np.cos(2 * ϕ) - (-1 / (4 * χ ** 3) + 1 / χ - χ + 2 * χ * Π ** 2) * np.sin(2 * ϕ) + (-Π ** 3 - Π - 3 * Π / (4 * χ ** 2) - Π * χ ** 2))
+        return np.array([f0, f1, f2, f3])
+
+    # noise function
+    def N(y, t):
+        x = y[0]
+        p = y[1]
+        χ = y[2]
+        Π = y[3]
+        return np.diag([
+            np.sqrt(Γ) * ((2 * (χ ** 2 - 1 / 2)) * np.cos(ϕ) + 2 * χ * Π * np.sin(ϕ)),
+            np.sqrt(Γ) * (2 * χ * Π * np.cos(ϕ) + 2 * (-1 / 2 + Π ** 2 + 1 / (4 * χ ** 2)) * np.sin(ϕ)),
+            0,
+            0])
+
+    # calculating the trajectories
+    xs = []
+
+    # calculating the trajectories
+    for i in range(num_xs):
+        total = sdeint.itoint(f, N, y0, tspan)
+        xs.append(total)
+
+    # taking the averages for phase space
+    # averages = [[], [], [], []]
+    # for i in range(len(tspan)):
+    #     total0 = 0
+    #     total1 = 0
+    #     total2 = 0
+    #     total3 = 0
+    #     for x in xs:
+    #         total0 += x[i][0]
+    #         total1 += x[i][1]
+    #         total2 += x[i][2]
+    #         total3 += x[i][3]
+    #     average0 = (1/len(xs)) * total0
+    #     average1 = (1/len(xs)) * total1
+    #     average2 = (1/len(xs)) * total2
+    #     average3 = (1/len(xs)) * total3
+    #     averages[0].append(average0)
+    #     averages[1].append(average1)
+    #     averages[2].append(average2)
+    #     averages[3].append(average3)
+
+    # plotting poincare sections
+    # x = [averages[0][i*2000] for i in range(int(.20*len(averages[0])/2000), int(len(averages[0])/2000))]
+    # y = [averages[1][i*2000] for i in range(int(.20*len(averages[1])/2000), int(len(averages[1])/2000))]
+    # x = [averages[0][20000*i] for i in range(int(len(averages[0])/20000))]
+    # y = [averages[1][20000*i] for i in range(int(len(averages[1])/20000))]
+
+    # taking the averages for poincare sections
+    averages = [[], [], [], []]
+    for i in range(0, len(tspan),pts_in_a_period):
+        total0 = 0
+        total1 = 0
+        total2 = 0
+        total3 = 0
+        for x in xs:
+            total0 += x[i][0]
+            total1 += x[i][1]
+            total2 += x[i][2]
+            total3 += x[i][3]
+        average0 = (1/len(xs)) * total0
+        average1 = (1/len(xs)) * total1
+        average2 = (1/len(xs)) * total2
+        average3 = (1/len(xs)) * total3
+        averages[0].append(average0)
+        averages[1].append(average1)
+        averages[2].append(average2)
+        averages[3].append(average3)
+
+    # plotting poincare sections
+    x = [(averages[0][i])*β for i in range(int(len(averages[0])))]
+    y = [(averages[1][i])*β for i in range(int(len(averages[1])))]
+
+    fig = plt.figure()
+    ax1 = fig.add_subplot(111)
+    ax1.scatter(x, y, s=.4)
+    plt.xlabel("x")
+    plt.ylabel("p")
+    plt.xlim(-0.6/β, 0.6/β)
+    plt.ylim(-0.6/β, 0.6/β)
+
+    # plt.show()
+    plt.savefig(str(round(ϕ,2))+'_'+str(num_xs)+'tr'+'.png')
+
+ϕ = 0
+for ϕ in [0,math.pi/4,math.pi/2,math.pi*0.75,math.pi]:
+    run_test(ϕ,150)
